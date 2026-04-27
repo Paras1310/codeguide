@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { apiRequest } from "../../api/client";
 import { clearAuthData } from "../../auth/tokenStorage";
-import ChallengeHints from "../../challenges/ChallengeHints";
 import ChallengeRunner from "../../challenges/ChallengeRunner";
 
 function LessonDetailPage() {
@@ -34,6 +33,32 @@ function LessonDetailPage() {
 
     loadLesson();
   }, [navigate, slug]);
+
+  function handleProgressSaved(data) {
+    if (!data?.lesson || !data?.challenge) {
+      return;
+    }
+
+    setLesson((currentLesson) => {
+      if (!currentLesson) {
+        return currentLesson;
+      }
+
+      return {
+        ...currentLesson,
+        is_completed: data.lesson.is_completed,
+        challenges: currentLesson.challenges.map((item) =>
+          item.id === data.challenge.id
+            ? {
+                ...item,
+                is_passed: data.challenge.is_passed,
+                attempts: data.challenge.attempts,
+              }
+            : item
+        ),
+      };
+    });
+  }
 
   if (isLoading) {
     return (
@@ -100,25 +125,25 @@ function LessonDetailPage() {
               </p>
             </section>
 
-            {lesson.syntax && (
+            {lesson.syntax ? (
               <section>
                 <h2 className="text-xl font-semibold">Syntax</h2>
                 <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-200">
                   <code>{lesson.syntax}</code>
                 </pre>
               </section>
-            )}
+            ) : null}
 
-            {lesson.example && (
+            {lesson.example ? (
               <section>
                 <h2 className="text-xl font-semibold">Example</h2>
                 <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-200">
                   <code>{lesson.example}</code>
                 </pre>
               </section>
-            )}
+            ) : null}
 
-            {lesson.common_mistakes.length > 0 && (
+            {lesson.common_mistakes?.length > 0 ? (
               <section>
                 <h2 className="text-xl font-semibold">Common mistakes</h2>
                 <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-300">
@@ -127,16 +152,16 @@ function LessonDetailPage() {
                   ))}
                 </ul>
               </section>
-            )}
+            ) : null}
 
-            {lesson.recap && (
+            {lesson.recap ? (
               <section>
                 <h2 className="text-xl font-semibold">Recap</h2>
                 <p className="mt-3 whitespace-pre-line text-slate-300">
                   {lesson.recap}
                 </p>
               </section>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -179,44 +204,20 @@ function LessonDetailPage() {
                     </span>
                   </div>
 
-                  <p className="mt-2 text-slate-300">
-                    {challenge.instructions}
-                  </p>
-
-                  {challenge.challenge_type === "debug" && (
+                  {challenge.challenge_type === "debug" ? (
                     <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
                       This is a debugging challenge. The starter code is
                       intentionally broken. Your job is to read the error,
                       understand the issue, and fix the code.
                     </div>
-                  )}
+                  ) : null}
 
-                  <ChallengeHints hints={challenge.hints} />
-
-                  <ChallengeRunner
-                    challenge={challenge}
-                    onProgressSaved={(data) => {
-                      setLesson((currentLesson) => {
-                        if (!currentLesson) {
-                          return currentLesson;
-                        }
-
-                        return {
-                          ...currentLesson,
-                          is_completed: data.lesson.is_completed,
-                          challenges: currentLesson.challenges.map((item) =>
-                            item.id === data.challenge.id
-                              ? {
-                                  ...item,
-                                  is_passed: data.challenge.is_passed,
-                                  attempts: data.challenge.attempts,
-                                }
-                              : item,
-                          ),
-                        };
-                      });
-                    }}
-                  />
+                  <div className="mt-4">
+                    <ChallengeRunner
+                      challenge={challenge}
+                      onProgressSaved={handleProgressSaved}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
