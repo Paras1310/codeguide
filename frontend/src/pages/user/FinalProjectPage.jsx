@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { apiRequest } from "../../api/client";
 import { clearAuthData } from "../../auth/tokenStorage";
+import PageState from "../../components/ui/PageState";
 
 const emptyForm = {
   project_title: "",
@@ -19,30 +20,57 @@ function FinalProjectPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    async function loadFinalProject() {
-      try {
-        const data = await apiRequest("/learning/final-project/");
+    let isActive = true;
+
+    apiRequest("/learning/final-project/")
+      .then((data) => {
+        if (!isActive) {
+          return;
+        }
+
         setProjectData(data);
 
         if (data.submission) {
           setFormData({
-            project_title: data.submission.project_title,
-            description: data.submission.description,
-            source_code: data.submission.source_code,
+            project_title: data.submission.project_title || "",
+            description: data.submission.description || "",
+            source_code: data.submission.source_code || "",
           });
         }
-      } catch {
-        clearAuthData();
-        navigate("/login");
-      } finally {
-        setIsLoading(false);
-      }
-    }
+      })
+      .catch((err) => {
+        if (!isActive) {
+          return;
+        }
 
-    loadFinalProject();
-  }, [navigate]);
+        if (err.message.includes("Authentication")) {
+          clearAuthData();
+          navigate("/login");
+          return;
+        }
+
+        setLoadError(err.message || "Final project could not be loaded.");
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [navigate, reloadKey]);
+
+  function handleRetry() {
+    setIsLoading(true);
+    setLoadError("");
+    setReloadKey((currentKey) => currentKey + 1);
+  }
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -73,7 +101,7 @@ function FinalProjectPage() {
 
       setMessage(data.message);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Final project submission failed.");
     } finally {
       setIsSubmitting(false);
     }
@@ -82,7 +110,29 @@ function FinalProjectPage() {
   if (isLoading) {
     return (
       <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
-        <p className="text-slate-400">Loading final project...</p>
+        <section className="mx-auto max-w-4xl">
+          <PageState
+            type="loading"
+            title="Loading final project"
+            message="Checking your learning progress and final project submission status."
+          />
+        </section>
+      </main>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
+        <section className="mx-auto max-w-4xl">
+          <PageState
+            type="error"
+            title="Final project could not be loaded"
+            message={loadError}
+            actionLabel="Try again"
+            onAction={handleRetry}
+          />
+        </section>
       </main>
     );
   }
@@ -90,36 +140,51 @@ function FinalProjectPage() {
   if (!projectData) {
     return (
       <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
-        <p className="text-red-400">Final project could not be loaded.</p>
+        <section className="mx-auto max-w-4xl">
+          <PageState
+            type="empty"
+            title="Final project unavailable"
+            message="No published final project was found. Seed the final project from the backend."
+            actionLabel="Go to learning path"
+            actionTo="/learn"
+          />
+        </section>
       </main>
     );
   }
 
   const { project, learning, submission } = projectData;
-  const canSubmit = learning.is_learning_completed;
+  const requirements = Array.isArray(project.requirements)
+    ? project.requirements
+    : [];
+  const starterIdeas = Array.isArray(project.starter_ideas)
+    ? project.starter_ideas
+    : [];
+  const canSubmit = Boolean(learning.is_learning_completed);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
       <section className="mx-auto max-w-4xl">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">
               CodeGuide
             </p>
+
             <h1 className="mt-2 text-3xl font-bold">Final Mini Project</h1>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Link
               to="/learn"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-cyan-400 hover:text-cyan-300"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm transition hover:border-cyan-400 hover:text-cyan-300"
             >
               Learning path
             </Link>
 
             <Link
               to="/dashboard"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-cyan-400 hover:text-cyan-300"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm transition hover:border-cyan-400 hover:text-cyan-300"
             >
               Dashboard
             </Link>
@@ -134,21 +199,33 @@ function FinalProjectPage() {
           <div className="mt-6 rounded-xl bg-slate-950 p-4">
             <h3 className="font-semibold text-slate-100">Requirements</h3>
 
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
-              {project.requirements.map((requirement) => (
-                <li key={requirement}>{requirement}</li>
-              ))}
-            </ul>
+            {requirements.length > 0 ? (
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
+                {requirements.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-slate-400">
+                No requirements added yet.
+              </p>
+            )}
           </div>
 
           <div className="mt-6 rounded-xl bg-slate-950 p-4">
             <h3 className="font-semibold text-slate-100">Starter ideas</h3>
 
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
-              {project.starter_ideas.map((idea) => (
-                <li key={idea}>{idea}</li>
-              ))}
-            </ul>
+            {starterIdeas.length > 0 ? (
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
+                {starterIdeas.map((idea) => (
+                  <li key={idea}>{idea}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-slate-400">
+                No starter ideas added yet.
+              </p>
+            )}
           </div>
         </div>
 
@@ -157,8 +234,7 @@ function FinalProjectPage() {
 
           <div className="mt-4 rounded-xl bg-slate-950 p-4 text-sm text-slate-300">
             <p>
-              Required challenges passed:{" "}
-              {learning.passed_required_challenges}/
+              Required challenges passed: {learning.passed_required_challenges}/
               {learning.total_required_challenges}
             </p>
 
@@ -181,12 +257,17 @@ function FinalProjectPage() {
             </p>
           </div>
 
-          {!canSubmit && (
-            <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-              Complete all required challenges before submitting the final
-              project.
+          {!canSubmit ? (
+            <div className="mt-5">
+              <PageState
+                type="warning"
+                title="Final project locked"
+                message="Complete all required challenges before submitting the final mini project."
+                actionLabel="Continue learning"
+                actionTo="/learn"
+              />
             </div>
-          )}
+          ) : null}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
@@ -200,7 +281,7 @@ function FinalProjectPage() {
                 value={formData.project_title}
                 onChange={handleChange}
                 disabled={!canSubmit}
-                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
                 placeholder="Example: Grade Calculator"
               />
             </div>
@@ -216,7 +297,7 @@ function FinalProjectPage() {
                 onChange={handleChange}
                 disabled={!canSubmit}
                 rows="4"
-                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
                 placeholder="Explain what your project does and which concepts it uses."
               />
             </div>
@@ -232,7 +313,7 @@ function FinalProjectPage() {
                 onChange={handleChange}
                 disabled={!canSubmit}
                 rows="10"
-                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-white outline-none focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-white outline-none transition focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
                 placeholder="Paste your JavaScript code here."
               />
             </div>
@@ -240,13 +321,13 @@ function FinalProjectPage() {
             <button
               type="submit"
               disabled={!canSubmit || isSubmitting}
-              className="rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? "Submitting..." : "Submit final project"}
             </button>
 
-            {message && <p className="text-sm text-green-400">{message}</p>}
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {message ? <p className="text-sm text-green-400">{message}</p> : null}
+            {error ? <p className="text-sm text-red-400">{error}</p> : null}
           </form>
         </div>
       </section>

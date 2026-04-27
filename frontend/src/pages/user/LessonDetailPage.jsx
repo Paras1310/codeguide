@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiRequest } from "../../api/client";
 import { clearAuthData } from "../../auth/tokenStorage";
 import ChallengeRunner from "../../challenges/ChallengeRunner";
+import { ErrorState, LoadingState } from "../../components/ui/PageState";
 
 function LessonDetailPage() {
   const navigate = useNavigate();
@@ -54,7 +55,7 @@ function LessonDetailPage() {
                 is_passed: data.challenge.is_passed,
                 attempts: data.challenge.attempts,
               }
-            : item
+            : item,
         ),
       };
     });
@@ -62,28 +63,21 @@ function LessonDetailPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
-        <section className="mx-auto max-w-4xl">
-          <p className="text-slate-400">Loading lesson...</p>
-        </section>
-      </main>
+      <LoadingState
+        title="Loading lesson"
+        message="Fetching the lesson content, challenges, hints, and progress."
+      />
     );
   }
 
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
-        <section className="mx-auto max-w-4xl">
-          <p className="text-red-400">{error}</p>
-
-          <Link
-            to="/learn"
-            className="mt-4 inline-block text-cyan-400 hover:underline"
-          >
-            Back to learning path
-          </Link>
-        </section>
-      </main>
+      <ErrorState
+        title="Lesson could not be loaded"
+        message={error}
+        actionLabel="Back to learning path"
+        actionTo="/learn"
+      />
     );
   }
 
