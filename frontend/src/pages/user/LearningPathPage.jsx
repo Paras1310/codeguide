@@ -184,12 +184,6 @@ function LearningPathPage() {
             </p>
           </div>
 
-          <Link
-            to="/dashboard"
-            className="rounded-xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-blue-400 hover:text-blue-300"
-          >
-            Back to dashboard
-          </Link>
         </div>
 
         <div className="mt-8 rounded-3xl border border-blue-400/15 bg-slate-900/80 p-6 shadow-2xl shadow-blue-950/20">

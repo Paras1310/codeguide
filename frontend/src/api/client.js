@@ -1,7 +1,9 @@
+import { clearAuthData, getAccessToken } from "../auth/tokenStorage";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export async function apiRequest(path, options = {}) {
-  const accessToken = localStorage.getItem("codeguide_access_token");
+  const accessToken = getAccessToken();
   const skipAuth = options.skipAuth === true;
 
   const headers = {
@@ -19,6 +21,11 @@ export async function apiRequest(path, options = {}) {
   });
 
   const data = await response.json().catch(() => null);
+
+  if (response.status === 401 && !skipAuth) {
+    clearAuthData();
+    throw new Error("Authentication expired. Please login again.");
+  }
 
   if (!response.ok) {
     const message =

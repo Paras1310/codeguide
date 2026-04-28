@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { getSavedUser } from "./auth/tokenStorage";
+import { isAuthenticated } from "./auth/tokenStorage";
 import UserHeader from "./components/layout/UserHeader";
 
 import CertificatePage from "./pages/user/CertificatePage";
@@ -14,7 +14,7 @@ import RegisterPage from "./pages/user/RegisterPage";
 import VerifyCertificatePage from "./pages/user/VerifyCertificatePage";
 
 function ProtectedRoute({ children }) {
-  const isLoggedIn = Boolean(getSavedUser());
+  const isLoggedIn = isAuthenticated();
 
   if (!isLoggedIn) {
     return <Navigate to="/login" replace />;

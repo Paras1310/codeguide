@@ -36,7 +36,7 @@ function UserHeader() {
 
   function handleLogout() {
     clearAuthData();
-    navigate("/login");
+    navigate("/login", { replace: true });
   }
 
   return (

@@ -13,79 +13,130 @@ function LoginPage() {
   });
 
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleChange(event) {
-    setFormData({
-      ...formData,
-      [event.target.name]: event.target.value,
-    });
+    const { name, value } = event.target;
+
+    setFormData((currentData) => ({
+      ...currentData,
+      [name]: value,
+    }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
     setError("");
+    setIsSubmitting(true);
 
     try {
       const data = await apiRequest("/auth/login/", {
         method: "POST",
-        body: JSON.stringify(formData),
         skipAuth: true,
+        body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+        }),
       });
 
-      saveAuthData(data);
+      const accessToken = data?.tokens?.access;
+      const refreshToken = data?.tokens?.refresh;
+      const user = data?.user;
+
+      if (!accessToken || !refreshToken || !user) {
+        throw new Error("Invalid login response.");
+      }
+
+      saveAuthData({
+        accessToken,
+        refreshToken,
+        user,
+      });
+
       navigate("/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Login failed.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-12 text-white">
-      <section className="mx-auto max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">
-          CodeGuide
-        </p>
+    <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
+      <section className="mx-auto flex min-h-[80vh] max-w-md items-center">
+        <div className="w-full rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-cyan-950/20">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-300">
+            CodeGuide
+          </p>
 
-        <h1 className="mt-3 text-3xl font-bold">Login</h1>
+          <h1 className="mt-3 text-3xl font-bold">Login</h1>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="text-sm text-slate-300">Email</label>
-            <input
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-cyan-400"
-            />
-          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Continue your guided JavaScript learning path.
+          </p>
 
-          <div>
-            <label className="text-sm text-slate-300">Password</label>
-            <input
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-cyan-400"
-            />
-          </div>
+          {error ? (
+            <div className="mt-5 rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-200">
+              {error}
+            </div>
+          ) : null}
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div>
+              <label
+                htmlFor="email"
+                className="text-sm font-semibold text-slate-200"
+              >
+                Email
+              </label>
 
-          <button className="w-full rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 hover:bg-cyan-300">
-            Login
-          </button>
-        </form>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-400"
+              />
+            </div>
 
-        <p className="mt-4 text-sm text-slate-400">
-          New to CodeGuide?{" "}
-          <Link to="/register" className="text-cyan-400 hover:underline">
-            Create account
-          </Link>
-        </p>
+            <div>
+              <label
+                htmlFor="password"
+                className="text-sm font-semibold text-slate-200"
+              >
+                Password
+              </label>
+
+              <input
+                id="password"
+                name="password"
+                type="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-400"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? "Logging in..." : "Login"}
+            </button>
+          </form>
+
+          <p className="mt-5 text-center text-sm text-slate-400">
+            Do not have an account?{" "}
+            <Link to="/register" className="font-semibold text-cyan-300">
+              Register
+            </Link>
+          </p>
+        </div>
       </section>
     </main>
   );

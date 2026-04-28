@@ -118,22 +118,6 @@ function CertificatePage() {
             </p>
             <h1 className="mt-2 text-3xl font-bold">Certificate Eligibility</h1>
           </div>
-
-          <div className="flex gap-3">
-            <Link
-              to="/dashboard"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-cyan-400 hover:text-cyan-300"
-            >
-              Dashboard
-            </Link>
-
-            <Link
-              to="/final-project"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-cyan-400 hover:text-cyan-300"
-            >
-              Final project
-            </Link>
-          </div>
         </div>
 
         <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">

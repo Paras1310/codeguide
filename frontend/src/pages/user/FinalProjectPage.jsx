@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { apiRequest } from "../../api/client";
 import { clearAuthData } from "../../auth/tokenStorage";
@@ -172,22 +172,6 @@ function FinalProjectPage() {
             </p>
 
             <h1 className="mt-2 text-3xl font-bold">Final Mini Project</h1>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Link
-              to="/learn"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm transition hover:border-cyan-400 hover:text-cyan-300"
-            >
-              Learning path
-            </Link>
-
-            <Link
-              to="/dashboard"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm transition hover:border-cyan-400 hover:text-cyan-300"
-            >
-              Dashboard
-            </Link>
           </div>
         </div>
 

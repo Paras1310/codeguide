@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { apiRequest } from "../../api/client";
-import { clearAuthData, getSavedUser } from "../../auth/tokenStorage";
+import { getSavedUser } from "../../auth/tokenStorage";
 import { ErrorState, LoadingState } from "../../components/ui/PageState";
 
 function getCompletedLessonCount(lessons) {
@@ -31,7 +31,7 @@ function getChallengeTotals(lessons) {
         passed: totals.passed + Number(passed),
       };
     },
-    { total: 0, passed: 0 }
+    { total: 0, passed: 0 },
   );
 }
 
@@ -39,7 +39,14 @@ function getNextLesson(lessons) {
   return lessons.find((lesson) => !lesson.is_completed) || lessons[0] || null;
 }
 
-function DashboardCard({ title, value, description, actionLabel, to, disabled }) {
+function DashboardCard({
+  title,
+  value,
+  description,
+  actionLabel,
+  to,
+  disabled,
+}) {
   return (
     <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/30">
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
@@ -97,8 +104,7 @@ function DashboardPage() {
         setFinalProjectData(finalProjectResponse);
       } catch (err) {
         if (err.message.includes("Authentication")) {
-          clearAuthData();
-          navigate("/login");
+          navigate("/login", { replace: true });
           return;
         }
 
@@ -113,7 +119,7 @@ function DashboardPage() {
 
   const completedLessonCount = useMemo(
     () => getCompletedLessonCount(lessons),
-    [lessons]
+    [lessons],
   );
 
   const challengeTotals = useMemo(() => getChallengeTotals(lessons), [lessons]);
@@ -141,10 +147,7 @@ function DashboardPage() {
   const finalProjectTitle =
     finalProjectData?.project?.title || "JavaScript Final Mini Project";
 
-  function handleLogout() {
-    clearAuthData();
-    navigate("/login");
-  }
+
 
   if (isLoading) {
     return <LoadingState title="Loading dashboard..." />;
@@ -164,7 +167,7 @@ function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-white">
       <section className="mx-auto max-w-6xl">
-        <header className="flex flex-col gap-5 border-b border-slate-800 pb-8 sm:flex-row sm:items-start sm:justify-between">
+        <header className="border-b border-slate-800 pb-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-300">
               CodeGuide Dashboard
@@ -190,14 +193,6 @@ function DashboardPage() {
               </span>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:border-red-400 hover:text-red-300"
-          >
-            Logout
-          </button>
         </header>
 
         <section className="mt-8 grid gap-5 md:grid-cols-3">
@@ -249,7 +244,11 @@ function DashboardPage() {
             </p>
 
             <h2 className="mt-3 text-3xl font-bold">
-              {certificateIssued ? "Issued" : canIssueCertificate ? "Ready" : "Locked"}
+              {certificateIssued
+                ? "Issued"
+                : canIssueCertificate
+                  ? "Ready"
+                  : "Locked"}
             </h2>
 
             <p className="mt-4 text-sm leading-6 text-slate-400">
@@ -257,7 +256,8 @@ function DashboardPage() {
                 ? "Your verified completion certificate is available."
                 : canIssueCertificate
                   ? "You can now issue your certificate."
-                  : eligibility?.reason || "Complete requirements to unlock it."}
+                  : eligibility?.reason ||
+                    "Complete requirements to unlock it."}
             </p>
           </div>
         </section>
@@ -271,7 +271,9 @@ function DashboardPage() {
                 ? `Next lesson: ${nextLesson.title}`
                 : "Your learning path is ready."
             }
-            actionLabel={learningCompleted ? "Review lessons" : "Continue learning"}
+            actionLabel={
+              learningCompleted ? "Review lessons" : "Continue learning"
+            }
             to={nextLesson ? `/learn/${nextLesson.slug}` : "/learn"}
           />
 
@@ -283,7 +285,9 @@ function DashboardPage() {
                 ? `${finalProjectTitle} has been submitted successfully.`
                 : "Submit your final mini project after completing required challenges."
             }
-            actionLabel={finalProjectCompleted ? "Review project" : "Open final project"}
+            actionLabel={
+              finalProjectCompleted ? "Review project" : "Open final project"
+            }
             to="/final-project"
           />
 
@@ -322,8 +326,8 @@ function DashboardPage() {
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
                 A certificate is issued only after required lessons, required
                 challenges, and the final project are complete. The backend
-                decides eligibility. The downloaded certificate is not the source
-                of truth.
+                decides eligibility. The downloaded certificate is not the
+                source of truth.
               </p>
             </div>
 
