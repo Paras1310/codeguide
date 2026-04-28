@@ -126,13 +126,65 @@ def get_certificate_eligibility(user):
         "certificate": certificate,
     }
 
+def get_previous_published_lesson(lesson):
+    return (
+        Lesson.objects.filter(is_published=True, order__lt=lesson.order)
+        .order_by("-order")
+        .first()
+    )
+
+
+def is_lesson_completed_by_user(user, lesson):
+    if lesson is None:
+        return True
+
+    return UserLessonProgress.objects.filter(
+        user=user,
+        lesson=lesson,
+        is_completed=True,
+    ).exists()
+
+
+def get_lesson_lock_state(user, lesson):
+    previous_lesson = get_previous_published_lesson(lesson)
+
+    if previous_lesson is None:
+        return {
+            "is_locked": False,
+            "previous_lesson_title": None,
+            "unlock_message": "This is the first lesson.",
+        }
+
+    previous_lesson_completed = is_lesson_completed_by_user(
+        user=user,
+        lesson=previous_lesson,
+    )
+
+    if previous_lesson_completed:
+        return {
+            "is_locked": False,
+            "previous_lesson_title": previous_lesson.title,
+            "unlock_message": "Lesson unlocked.",
+        }
+
+    return {
+        "is_locked": True,
+        "previous_lesson_title": previous_lesson.title,
+        "unlock_message": f"Complete '{previous_lesson.title}' to unlock this lesson.",
+    }
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def lesson_list_view(request):
-    lessons = Lesson.objects.filter(is_published=True).prefetch_related(
+    lessons = (
+    Lesson.objects.filter(is_published=True)
+    .order_by("order")
+    .prefetch_related(
         "challenges",
         "user_progress",
     )
+)
+    
 
     serializer = LessonListSerializer(
         lessons,
@@ -343,6 +395,17 @@ def lesson_detail_view(request, slug):
             },
             status=status.HTTP_404_NOT_FOUND,
         )
+    
+    lock_state = get_lesson_lock_state(request.user, lesson)
+
+    if lock_state["is_locked"]:
+        return Response(
+        {
+            "detail": lock_state["unlock_message"],
+            "lock": lock_state,
+        },
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
     serializer = LessonDetailSerializer(
         lesson,
@@ -381,7 +444,6 @@ def update_lesson_completion(user, lesson):
 
     return True
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def complete_challenge_view(request, challenge_id):
@@ -397,6 +459,17 @@ def complete_challenge_view(request, challenge_id):
                 "detail": "Challenge not found.",
             },
             status=status.HTTP_404_NOT_FOUND,
+        )
+
+    lock_state = get_lesson_lock_state(request.user, challenge.lesson)
+
+    if lock_state["is_locked"]:
+        return Response(
+            {
+                "detail": lock_state["unlock_message"],
+                "lock": lock_state,
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     progress, _ = UserChallengeProgress.objects.get_or_create(
@@ -426,6 +499,7 @@ def complete_challenge_view(request, challenge_id):
             },
         }
     )
+
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
