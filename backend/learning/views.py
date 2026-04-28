@@ -19,36 +19,64 @@ from learning.serializers import LessonDetailSerializer, LessonListSerializer
 
 
 def get_certificate_learner_name(user):
-    learner_name = user.get_full_name().strip()
+    full_name = str(getattr(user, "full_name", "")).strip()
 
-    if not learner_name:
-        learner_name = user.username.strip()
+    if full_name:
+        return full_name
 
-    if not learner_name:
-        learner_name = "CodeGuide Learner"
+    first_name = str(getattr(user, "first_name", "")).strip()
+    last_name = str(getattr(user, "last_name", "")).strip()
+    name_from_parts = f"{first_name} {last_name}".strip()
 
-    return learner_name
+    if name_from_parts:
+        return name_from_parts
+
+    username = str(getattr(user, "username", "")).strip()
+
+    if username:
+        return username
+
+    email = str(getattr(user, "email", "")).strip()
+
+    if email:
+        return email.split("@")[0]
+
+    return "CodeGuide Learner"
 
 
 def serialize_certificate(certificate):
+    if certificate is None:
+        return None
+
+    learner_name = str(getattr(certificate, "learner_name", "")).strip()
+
+    if not learner_name:
+        learner_name = get_certificate_learner_name(certificate.user)
+
     return {
         "id": certificate.id,
         "certificate_id": str(certificate.certificate_id),
         "title": certificate.title,
         "course_name": certificate.course_name,
-        "learner_name": get_certificate_learner_name(certificate.user),
+        "learner_name": learner_name,
         "status": certificate.status,
         "issued_at": certificate.issued_at,
         "revoked_at": certificate.revoked_at,
         "revoke_reason": certificate.revoke_reason,
     }
 
+
 def serialize_public_certificate(certificate):
+    learner_name = str(getattr(certificate, "learner_name", "")).strip()
+
+    if not learner_name:
+        learner_name = get_certificate_learner_name(certificate.user)
+
     return {
         "certificate_id": str(certificate.certificate_id),
         "title": certificate.title,
         "course_name": certificate.course_name,
-        "learner_name": get_certificate_learner_name(certificate.user),
+        "learner_name": learner_name,
         "status": certificate.status,
         "issued_at": certificate.issued_at,
         "revoked_at": certificate.revoked_at,
