@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from learning.models import Challenge, ChallengeHint, ChallengeTestCase, Lesson
+from learning.models import Challenge, ChallengeHint, ChallengeTestCase, Lesson, UserChallengeProgress
 
 
 class ChallengeHintSerializer(serializers.ModelSerializer):
@@ -67,6 +67,8 @@ class ChallengeSerializer(serializers.ModelSerializer):
 
 class LessonListSerializer(serializers.ModelSerializer):
     challenge_count = serializers.SerializerMethodField()
+    passed_challenge_count = serializers.SerializerMethodField()
+    progress_percent = serializers.SerializerMethodField()
     is_completed = serializers.SerializerMethodField()
 
     class Meta:
@@ -79,19 +81,44 @@ class LessonListSerializer(serializers.ModelSerializer):
             "level",
             "concept",
             "challenge_count",
+            "passed_challenge_count",
+            "progress_percent",
             "is_completed",
         ]
 
     def get_challenge_count(self, obj):
-        return obj.challenges.count()
+        return obj.challenges.filter(is_required=True).count()
+
+    def get_passed_challenge_count(self, obj):
+        request = self.context.get("request")
+
+        if not request or not request.user.is_authenticated:
+            return 0
+
+        return UserChallengeProgress.objects.filter(
+            user=request.user,
+            challenge__lesson=obj,
+            challenge__is_required=True,
+            is_passed=True,
+        ).count()
+
+    def get_progress_percent(self, obj):
+        total = self.get_challenge_count(obj)
+
+        if total == 0:
+            return 0
+
+        passed = self.get_passed_challenge_count(obj)
+        return round((passed / total) * 100)
 
     def get_is_completed(self, obj):
-        user = self.context["request"].user
+        total = self.get_challenge_count(obj)
 
-        return obj.user_progress.filter(
-            user=user,
-            is_completed=True,
-        ).exists()
+        if total == 0:
+            return False
+
+        passed = self.get_passed_challenge_count(obj)
+        return passed == total
 
 
 class LessonDetailSerializer(serializers.ModelSerializer):

@@ -1,9 +1,57 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { apiRequest } from "../../api/client";
 import { clearAuthData } from "../../auth/tokenStorage";
-import PageState from "../../components/ui/PageState";
+
+function getLessonProgress(lesson) {
+  const totalChallenges = Number(
+    lesson.challenge_count ??
+      lesson.required_challenge_count ??
+      lesson.total_required_challenges ??
+      lesson.challenges?.length ??
+      0
+  );
+
+  const passedChallenges = Number(
+    lesson.passed_challenge_count ??
+      lesson.passed_required_challenges ??
+      lesson.challenges?.filter((challenge) => challenge.is_passed).length ??
+      0
+  );
+
+  const progressPercent =
+    typeof lesson.progress_percent === "number"
+      ? lesson.progress_percent
+      : totalChallenges > 0
+        ? Math.round((passedChallenges / totalChallenges) * 100)
+        : 0;
+
+  const safeProgressPercent = Math.min(Math.max(progressPercent, 0), 100);
+
+  let status = "Not started";
+  let statusClass = "border-slate-700 bg-slate-800 text-slate-300";
+  let actionLabel = "Start lesson";
+
+  if (lesson.is_completed || safeProgressPercent === 100) {
+    status = "Completed";
+    statusClass = "border-green-400/30 bg-green-400/10 text-green-300";
+    actionLabel = "Review lesson";
+  } else if (passedChallenges > 0) {
+    status = "In progress";
+    statusClass = "border-blue-400/30 bg-blue-400/10 text-blue-300";
+    actionLabel = "Continue lesson";
+  }
+
+  return {
+    totalChallenges,
+    passedChallenges,
+    progressPercent: safeProgressPercent,
+    status,
+    statusClass,
+    actionLabel,
+  };
+}
 
 function LearningPathPage() {
   const navigate = useNavigate();
@@ -11,21 +59,20 @@ function LearningPathPage() {
   const [lessons, setLessons] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    let isActive = true;
+    let shouldIgnore = false;
 
     apiRequest("/learning/lessons/")
       .then((data) => {
-        if (!isActive) {
+        if (shouldIgnore) {
           return;
         }
 
         setLessons(Array.isArray(data.lessons) ? data.lessons : []);
       })
       .catch((err) => {
-        if (!isActive) {
+        if (shouldIgnore) {
           return;
         }
 
@@ -35,121 +82,244 @@ function LearningPathPage() {
           return;
         }
 
-        setError(err.message || "Lessons could not be loaded.");
+        setError(err.message || "Failed to load lessons.");
       })
       .finally(() => {
-        if (isActive) {
+        if (!shouldIgnore) {
           setIsLoading(false);
         }
       });
 
     return () => {
-      isActive = false;
+      shouldIgnore = true;
     };
-  }, [navigate, reloadKey]);
+  }, [navigate]);
 
-  function handleRetry() {
-    setIsLoading(true);
-    setError("");
-    setReloadKey((currentKey) => currentKey + 1);
+  const summary = useMemo(() => {
+    const totalLessons = lessons.length;
+
+    const completedLessons = lessons.filter((lesson) => {
+      const progress = getLessonProgress(lesson);
+      return lesson.is_completed || progress.progressPercent === 100;
+    }).length;
+
+    const totalChallenges = lessons.reduce((total, lesson) => {
+      return total + getLessonProgress(lesson).totalChallenges;
+    }, 0);
+
+    const passedChallenges = lessons.reduce((total, lesson) => {
+      return total + getLessonProgress(lesson).passedChallenges;
+    }, 0);
+
+    const courseProgress =
+      totalChallenges > 0
+        ? Math.round((passedChallenges / totalChallenges) * 100)
+        : 0;
+
+    return {
+      totalLessons,
+      completedLessons,
+      totalChallenges,
+      passedChallenges,
+      courseProgress,
+    };
+  }, [lessons]);
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
+        <section className="mx-auto max-w-5xl">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-300">
+              Loading
+            </p>
+            <h1 className="mt-3 text-3xl font-bold">Preparing your learning path...</h1>
+            <p className="mt-3 text-slate-400">
+              CodeGuide is loading lessons and progress data.
+            </p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
+        <section className="mx-auto max-w-5xl">
+          <div className="rounded-3xl border border-red-400/20 bg-red-400/10 p-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-red-300">
+              Error
+            </p>
+            <h1 className="mt-3 text-3xl font-bold">Learning path failed to load</h1>
+            <p className="mt-3 text-red-200">{error}</p>
+
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-xl bg-red-300 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-red-200"
+            >
+              Retry
+            </button>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
       <section className="mx-auto max-w-5xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">
-              CodeGuide
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-300">
+              Learning Path
             </p>
-
-            <h1 className="mt-2 text-3xl font-bold">
-              JavaScript Learning Path
+            <h1 className="mt-3 text-4xl font-bold">
+              JavaScript Beginner to Intermediate
             </h1>
-
-            <p className="mt-2 max-w-2xl text-slate-300">
-              Learn JavaScript step by step. Each lesson explains one concept
-              and connects directly to practice challenges.
+            <p className="mt-4 max-w-3xl text-slate-300">
+              Learn JavaScript step by step through explanations, practice
+              challenges, debugging tasks, guided hints, and progress tracking.
             </p>
           </div>
 
           <Link
             to="/dashboard"
-            className="w-fit rounded-lg border border-slate-700 px-4 py-2 text-sm transition hover:border-cyan-400 hover:text-cyan-400"
+            className="rounded-xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-blue-400 hover:text-blue-300"
           >
-            Dashboard
+            Back to dashboard
           </Link>
         </div>
 
-        <div className="mt-8">
-          {isLoading ? (
-            <PageState
-              type="loading"
-              title="Loading lessons"
-              message="Fetching your JavaScript learning path and challenge progress."
-            />
-          ) : null}
+        <div className="mt-8 rounded-3xl border border-blue-400/15 bg-slate-900/80 p-6 shadow-2xl shadow-blue-950/20">
+          <div className="grid gap-4 sm:grid-cols-4">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-sm text-slate-400">Course progress</p>
+              <p className="mt-2 text-3xl font-bold text-blue-300">
+                {summary.courseProgress}%
+              </p>
+            </div>
 
-          {!isLoading && error ? (
-            <PageState
-              type="error"
-              title="Lessons could not be loaded"
-              message={error}
-              actionLabel="Try again"
-              onAction={handleRetry}
-            />
-          ) : null}
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-sm text-slate-400">Lessons completed</p>
+              <p className="mt-2 text-3xl font-bold text-white">
+                {summary.completedLessons}/{summary.totalLessons}
+              </p>
+            </div>
 
-          {!isLoading && !error && lessons.length === 0 ? (
-            <PageState
-              type="empty"
-              title="No lessons available"
-              message="The learning path has no published lessons yet. Seed lessons from the backend first."
-              actionLabel="Go to dashboard"
-              actionTo="/dashboard"
-            />
-          ) : null}
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-sm text-slate-400">Challenges passed</p>
+              <p className="mt-2 text-3xl font-bold text-white">
+                {summary.passedChallenges}/{summary.totalChallenges}
+              </p>
+            </div>
 
-          {!isLoading && !error && lessons.length > 0 ? (
-            <div className="grid gap-4">
-              {lessons.map((lesson) => (
-                <Link
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-sm text-slate-400">Certificate unlock</p>
+              <p className="mt-2 text-sm font-semibold text-slate-200">
+                {summary.courseProgress === 100
+                  ? "Learning path completed"
+                  : "Complete all lessons first"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full bg-blue-400 transition-all"
+              style={{ width: `${summary.courseProgress}%` }}
+            />
+          </div>
+        </div>
+
+        {lessons.length === 0 ? (
+          <div className="mt-8 rounded-3xl border border-slate-800 bg-slate-900 p-8">
+            <h2 className="text-2xl font-bold">No lessons available</h2>
+            <p className="mt-3 text-slate-400">
+              Lessons have not been published yet. Seed lesson data from the
+              backend first.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-8 space-y-5">
+            {lessons.map((lesson) => {
+              const progress = getLessonProgress(lesson);
+
+              return (
+                <article
                   key={lesson.id}
-                  to={`/learn/${lesson.slug}`}
-                  className="rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-400"
+                  className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 transition hover:border-blue-400/40 hover:bg-slate-900"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm text-slate-400">
-                        Lesson {lesson.order} · {lesson.level}
-                      </p>
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
+                          Lesson {lesson.order}
+                        </span>
 
-                      <h2 className="mt-2 text-xl font-semibold">
+                        <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
+                          {lesson.level}
+                        </span>
+
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${progress.statusClass}`}
+                        >
+                          {progress.status}
+                        </span>
+                      </div>
+
+                      <h2 className="mt-4 text-2xl font-bold text-white">
                         {lesson.title}
                       </h2>
 
-                      <p className="mt-2 text-slate-300">{lesson.concept}</p>
-
-                      <p className="mt-3 text-sm text-slate-400">
-                        Challenges: {lesson.challenge_count}
+                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                        {lesson.concept}
                       </p>
+
+                      <div className="mt-5">
+                        <div className="mb-2 flex items-center justify-between text-sm">
+                          <span className="font-semibold text-slate-300">
+                            Lesson progress
+                          </span>
+                          <span className="text-slate-400">
+                            {progress.passedChallenges}/
+                            {progress.totalChallenges} challenges passed
+                          </span>
+                        </div>
+
+                        <div className="h-2.5 overflow-hidden rounded-full bg-slate-800">
+                          <div
+                            className="h-full rounded-full bg-blue-400 transition-all"
+                            style={{ width: `${progress.progressPercent}%` }}
+                          />
+                        </div>
+                      </div>
                     </div>
 
-                    <span
-                      className={
-                        lesson.is_completed
-                          ? "rounded-full bg-green-500/10 px-3 py-1 text-sm text-green-400"
-                          : "rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-300"
-                      }
-                    >
-                      {lesson.is_completed ? "Completed" : "Not started"}
-                    </span>
+                    <div className="flex shrink-0 flex-col gap-3 lg:w-44">
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-center">
+                        <p className="text-3xl font-bold text-blue-300">
+                          {progress.progressPercent}%
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          completed
+                        </p>
+                      </div>
+
+                      <Link
+                        to={`/learn/${lesson.slug}`}
+                        className="rounded-xl bg-blue-400 px-5 py-3 text-center text-sm font-bold text-slate-950 transition hover:bg-blue-300"
+                      >
+                        {progress.actionLabel}
+                      </Link>
+                    </div>
                   </div>
-                </Link>
-              ))}
-            </div>
-          ) : null}
-        </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
     </main>
   );
