@@ -44,6 +44,130 @@ def get_certificate_learner_name(user):
     return "CodeGuide Learner"
 
 
+def get_required_challenge_stats(user):
+    required_challenges = Challenge.objects.filter(
+        lesson__is_published=True,
+        is_required=True,
+    )
+
+    total_required_challenges = required_challenges.count()
+
+    passed_required_challenges = UserChallengeProgress.objects.filter(
+        user=user,
+        challenge__in=required_challenges,
+        is_passed=True,
+    ).count()
+
+    return {
+        "total_required_challenges": total_required_challenges,
+        "passed_required_challenges": passed_required_challenges,
+        "is_learning_completed": (
+            total_required_challenges > 0
+            and passed_required_challenges == total_required_challenges
+        ),
+    }
+
+
+def get_previous_published_lesson(lesson):
+    return (
+        Lesson.objects.filter(is_published=True, order__lt=lesson.order)
+        .order_by("-order")
+        .first()
+    )
+
+
+def get_next_published_lesson(lesson):
+    return (
+        Lesson.objects.filter(is_published=True, order__gt=lesson.order)
+        .order_by("order")
+        .first()
+    )
+
+
+def is_lesson_completed_by_user(user, lesson):
+    if lesson is None:
+        return True
+
+    stored_progress_exists = UserLessonProgress.objects.filter(
+        user=user,
+        lesson=lesson,
+        is_completed=True,
+    ).exists()
+
+    if stored_progress_exists:
+        return True
+
+    required_challenges = lesson.challenges.filter(is_required=True)
+
+    if not required_challenges.exists():
+        return False
+
+    passed_required_count = UserChallengeProgress.objects.filter(
+        user=user,
+        challenge__in=required_challenges,
+        is_passed=True,
+    ).count()
+
+    return passed_required_count == required_challenges.count()
+
+
+def get_lesson_lock_state(user, lesson):
+    previous_lesson = get_previous_published_lesson(lesson)
+
+    if previous_lesson is None:
+        return {
+            "is_locked": False,
+            "previous_lesson_title": None,
+            "unlock_message": "This is the first lesson.",
+        }
+
+    previous_lesson_completed = is_lesson_completed_by_user(
+        user=user,
+        lesson=previous_lesson,
+    )
+
+    if previous_lesson_completed:
+        return {
+            "is_locked": False,
+            "previous_lesson_title": previous_lesson.title,
+            "unlock_message": "Lesson unlocked.",
+        }
+
+    return {
+        "is_locked": True,
+        "previous_lesson_title": previous_lesson.title,
+        "unlock_message": f"Complete '{previous_lesson.title}' to unlock this lesson.",
+    }
+
+
+def serialize_lesson_navigation(user, lesson):
+    next_lesson = get_next_published_lesson(lesson)
+
+    if next_lesson is None:
+        return {
+            "next_lesson": None,
+            "has_next_lesson": False,
+            "final_project_available": get_required_challenge_stats(user)[
+                "is_learning_completed"
+            ],
+        }
+
+    lock_state = get_lesson_lock_state(user, next_lesson)
+
+    return {
+        "next_lesson": {
+            "id": next_lesson.id,
+            "title": next_lesson.title,
+            "slug": next_lesson.slug,
+            "order": next_lesson.order,
+            "is_locked": lock_state["is_locked"],
+            "unlock_message": lock_state["unlock_message"],
+        },
+        "has_next_lesson": True,
+        "final_project_available": False,
+    }
+
+
 def serialize_certificate(certificate):
     if certificate is None:
         return None
@@ -81,6 +205,7 @@ def serialize_public_certificate(certificate):
         "issued_at": certificate.issued_at,
         "revoked_at": certificate.revoked_at,
     }
+
 
 def has_completed_final_project(user):
     return UserFinalProjectSubmission.objects.filter(
@@ -126,101 +251,6 @@ def get_certificate_eligibility(user):
         "certificate": certificate,
     }
 
-def get_previous_published_lesson(lesson):
-    return (
-        Lesson.objects.filter(is_published=True, order__lt=lesson.order)
-        .order_by("-order")
-        .first()
-    )
-
-
-def is_lesson_completed_by_user(user, lesson):
-    if lesson is None:
-        return True
-
-    return UserLessonProgress.objects.filter(
-        user=user,
-        lesson=lesson,
-        is_completed=True,
-    ).exists()
-
-
-def get_lesson_lock_state(user, lesson):
-    previous_lesson = get_previous_published_lesson(lesson)
-
-    if previous_lesson is None:
-        return {
-            "is_locked": False,
-            "previous_lesson_title": None,
-            "unlock_message": "This is the first lesson.",
-        }
-
-    previous_lesson_completed = is_lesson_completed_by_user(
-        user=user,
-        lesson=previous_lesson,
-    )
-
-    if previous_lesson_completed:
-        return {
-            "is_locked": False,
-            "previous_lesson_title": previous_lesson.title,
-            "unlock_message": "Lesson unlocked.",
-        }
-
-    return {
-        "is_locked": True,
-        "previous_lesson_title": previous_lesson.title,
-        "unlock_message": f"Complete '{previous_lesson.title}' to unlock this lesson.",
-    }
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def lesson_list_view(request):
-    lessons = (
-    Lesson.objects.filter(is_published=True)
-    .order_by("order")
-    .prefetch_related(
-        "challenges",
-        "user_progress",
-    )
-)
-    
-
-    serializer = LessonListSerializer(
-        lessons,
-        many=True,
-        context={"request": request},
-    )
-
-    return Response(
-        {
-            "lessons": serializer.data,
-        }
-    )
-
-def get_required_challenge_stats(user):
-    required_challenges = Challenge.objects.filter(
-        lesson__is_published=True,
-        is_required=True,
-    )
-
-    total_required_challenges = required_challenges.count()
-
-    passed_required_challenges = UserChallengeProgress.objects.filter(
-        user=user,
-        challenge__in=required_challenges,
-        is_passed=True,
-    ).count()
-
-    return {
-        "total_required_challenges": total_required_challenges,
-        "passed_required_challenges": passed_required_challenges,
-        "is_learning_completed": (
-            total_required_challenges > 0
-            and passed_required_challenges == total_required_challenges
-        ),
-    }
-
 
 def serialize_final_project(project):
     return {
@@ -246,6 +276,58 @@ def serialize_final_project_submission(submission):
         "submitted_at": submission.submitted_at,
         "updated_at": submission.updated_at,
     }
+
+
+def update_lesson_completion(user, lesson):
+    required_challenges = lesson.challenges.filter(is_required=True)
+
+    if not required_challenges.exists():
+        return False
+
+    passed_required_count = UserChallengeProgress.objects.filter(
+        user=user,
+        challenge__in=required_challenges,
+        is_passed=True,
+    ).count()
+
+    if passed_required_count != required_challenges.count():
+        return False
+
+    lesson_progress, _ = UserLessonProgress.objects.get_or_create(
+        user=user,
+        lesson=lesson,
+    )
+
+    if not lesson_progress.is_completed:
+        lesson_progress.mark_completed()
+
+    return True
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def lesson_list_view(request):
+    lessons = (
+        Lesson.objects.filter(is_published=True)
+        .order_by("order")
+        .prefetch_related(
+            "challenges",
+            "user_progress",
+        )
+    )
+
+    serializer = LessonListSerializer(
+        lessons,
+        many=True,
+        context={"request": request},
+    )
+
+    return Response(
+        {
+            "lessons": serializer.data,
+        }
+    )
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -288,6 +370,7 @@ def progress_summary_view(request):
             }
         }
     )
+
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
@@ -374,6 +457,7 @@ def final_project_view(request):
         status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
     )
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def lesson_detail_view(request, slug):
@@ -395,17 +479,17 @@ def lesson_detail_view(request, slug):
             },
             status=status.HTTP_404_NOT_FOUND,
         )
-    
+
     lock_state = get_lesson_lock_state(request.user, lesson)
 
     if lock_state["is_locked"]:
         return Response(
-        {
-            "detail": lock_state["unlock_message"],
-            "lock": lock_state,
-        },
-        status=status.HTTP_403_FORBIDDEN,
-    )
+            {
+                "detail": lock_state["unlock_message"],
+                "lock": lock_state,
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     serializer = LessonDetailSerializer(
         lesson,
@@ -415,34 +499,10 @@ def lesson_detail_view(request, slug):
     return Response(
         {
             "lesson": serializer.data,
+            "navigation": serialize_lesson_navigation(request.user, lesson),
         }
     )
 
-
-def update_lesson_completion(user, lesson):
-    required_challenges = lesson.challenges.filter(is_required=True)
-
-    if not required_challenges.exists():
-        return False
-
-    passed_required_count = UserChallengeProgress.objects.filter(
-        user=user,
-        challenge__in=required_challenges,
-        is_passed=True,
-    ).count()
-
-    if passed_required_count != required_challenges.count():
-        return False
-
-    lesson_progress, _ = UserLessonProgress.objects.get_or_create(
-        user=user,
-        lesson=lesson,
-    )
-
-    if not lesson_progress.is_completed:
-        lesson_progress.mark_completed()
-
-    return True
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -497,6 +557,7 @@ def complete_challenge_view(request, challenge_id):
                 "slug": challenge.lesson.slug,
                 "is_completed": lesson_completed,
             },
+            "navigation": serialize_lesson_navigation(request.user, challenge.lesson),
         }
     )
 
@@ -567,6 +628,7 @@ def certificate_view(request):
         },
         status=status.HTTP_201_CREATED,
     )
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])

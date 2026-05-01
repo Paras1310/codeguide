@@ -11,14 +11,19 @@ function LessonDetailPage() {
   const { slug } = useParams();
 
   const [lesson, setLesson] = useState(null);
+  const [lessonNavigation, setLessonNavigation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function loadLesson() {
+      setIsLoading(true);
+      setError("");
+
       try {
         const data = await apiRequest(`/learning/lessons/${slug}/`);
         setLesson(data.lesson);
+        setLessonNavigation(data.navigation || null);
       } catch (err) {
         if (err.message.includes("Authentication")) {
           clearAuthData();
@@ -26,7 +31,7 @@ function LessonDetailPage() {
           return;
         }
 
-        setError(err.message);
+        setError(err.message || "Lesson could not be loaded.");
       } finally {
         setIsLoading(false);
       }
@@ -39,6 +44,8 @@ function LessonDetailPage() {
     if (!data?.lesson || !data?.challenge) {
       return;
     }
+
+    setLessonNavigation(data.navigation || null);
 
     setLesson((currentLesson) => {
       if (!currentLesson) {
@@ -55,7 +62,7 @@ function LessonDetailPage() {
                 is_passed: data.challenge.is_passed,
                 attempts: data.challenge.attempts,
               }
-            : item,
+            : item
         ),
       };
     });
@@ -84,6 +91,8 @@ function LessonDetailPage() {
   if (!lesson) {
     return null;
   }
+
+  const challenges = lesson.challenges || [];
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
@@ -162,13 +171,13 @@ function LessonDetailPage() {
         <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-6">
           <h2 className="text-xl font-semibold">Practice challenges</h2>
 
-          {lesson.challenges.length === 0 ? (
+          {challenges.length === 0 ? (
             <p className="mt-3 text-slate-400">
               No challenges added for this lesson yet.
             </p>
           ) : (
             <div className="mt-4 space-y-4">
-              {lesson.challenges.map((challenge) => (
+              {challenges.map((challenge) => (
                 <div
                   key={challenge.id}
                   className="rounded-xl border border-slate-800 bg-slate-950 p-4"
@@ -217,6 +226,54 @@ function LessonDetailPage() {
             </div>
           )}
         </div>
+
+        {lesson.is_completed ? (
+          <div className="mt-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+              Lesson completed
+            </p>
+
+            <h2 className="mt-3 text-2xl font-bold text-white">
+              Good. You completed this lesson.
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Continue the guided path instead of jumping randomly. CodeGuide
+              unlocks lessons step by step.
+            </p>
+
+            {lessonNavigation?.next_lesson ? (
+              lessonNavigation.next_lesson.is_locked ? (
+                <div className="mt-5 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm text-yellow-100">
+                  {lessonNavigation.next_lesson.unlock_message ||
+                    "Complete the current lesson to unlock the next lesson."}
+                </div>
+              ) : (
+                <Link
+                  to={`/learn/${lessonNavigation.next_lesson.slug}`}
+                  className="mt-5 inline-flex rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Continue to Lesson {lessonNavigation.next_lesson.order}:{" "}
+                  {lessonNavigation.next_lesson.title}
+                </Link>
+              )
+            ) : lessonNavigation?.final_project_available ? (
+              <Link
+                to="/final-project"
+                className="mt-5 inline-flex rounded-xl bg-green-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-green-300"
+              >
+                Open Final Project
+              </Link>
+            ) : (
+              <Link
+                to="/learn"
+                className="mt-5 inline-flex rounded-xl border border-slate-700 px-5 py-3 text-sm font-bold text-slate-200 transition hover:border-cyan-400 hover:text-cyan-200"
+              >
+                Back to Learning Path
+              </Link>
+            )}
+          </div>
+        ) : null}
       </section>
     </main>
   );
